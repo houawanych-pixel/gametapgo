@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>GameTapGo</title>
+<meta name="description" content="Scroll, tap, play. Try game demos right in your browser.">
+<meta name="theme-color" content="#0b0d12">
+<meta property="og:title" content="GameTapGo">
+<meta property="og:description" content="Scroll, tap, play. Try game demos right in your browser.">
+<meta property="og:image" content="https://gametapgo.com/img/chronicle-clash.webp">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23ffcf33'/%3E%3Cpath d='M24 18l24 14-24 14z' fill='%230b0d12'/%3E%3C/svg%3E">
+<style>
+:root{--bg:#0b0d12;--ink:#fff;--dim:#b8bfcc;--acc:#ffcf33;--pink:#ff4f8b;--card:#161a22}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;overscroll-behavior:none}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+/* top bar */
+.top{position:fixed;top:0;left:0;right:0;z-index:20;display:flex;align-items:center;gap:10px;padding:calc(10px + env(safe-area-inset-top)) 16px 10px;background:linear-gradient(#0b0d12e6,#0b0d1200)}
+.logo{white-space:nowrap;font-weight:900;font-size:19px;letter-spacing:-.5px}
+.logo b{color:var(--acc)}
+.tabs{margin-left:auto;display:flex;gap:4px;background:#ffffff1a;border-radius:999px;padding:3px}
+.tabs button{white-space:nowrap;padding:6px 11px;border-radius:999px;font-size:14px;font-weight:700}
+.tabs button.on{background:var(--ink);color:var(--bg)}
+.mode{white-space:nowrap;font-size:11px;font-weight:800;padding:5px 8px;cursor:pointer;border-radius:999px;background:#2ecc7133;color:#7dffb0}
+.mode.adult{background:#ff4f8b33;color:#ff9fc0}
+/* feed */
+.feed{height:100dvh;overflow-y:scroll;scroll-snap-type:y mandatory}
+.card{position:relative;height:100dvh;scroll-snap-align:start;scroll-snap-stop:always;overflow:hidden;display:flex;align-items:flex-end}
+.card .bg{position:absolute;inset:0;background-size:cover;background-position:center}
+.card .bg:after{content:"";position:absolute;inset:0;background:linear-gradient(#0000 45%,#000d)}
+.info{position:relative;padding:0 84px calc(28px + env(safe-area-inset-bottom)) 18px;max-width:640px}
+.badge{display:inline-block;font-size:12px;font-weight:900;padding:3px 8px;border-radius:6px;background:var(--acc);color:#000;margin-bottom:8px}
+.badge.m{background:var(--pink);color:#fff}
+.info h2{font-size:30px;line-height:1.05;font-weight:900;letter-spacing:-.5px}
+.info p{color:var(--dim);margin:8px 0 14px;font-size:15px;line-height:1.35}
+.play{display:inline-flex;align-items:center;gap:8px;background:var(--acc);color:#000;font-weight:900;font-size:18px;padding:13px 26px;border-radius:999px;box-shadow:0 6px 24px #ffcf3355}
+.play:active{transform:scale(.96)}
+.side{position:absolute;right:12px;bottom:calc(36px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:18px;align-items:center}
+.side button{display:flex;flex-direction:column;align-items:center;gap:3px;font-size:11px;font-weight:700}
+.side svg{width:34px;height:34px;filter:drop-shadow(0 2px 4px #000a)}
+.saved svg path{fill:var(--pink);stroke:var(--pink)}
+.hint{position:absolute;left:50%;top:calc(64px + env(safe-area-inset-top));transform:translateX(-50%);font-size:12px;color:#fffa;background:#0006;padding:4px 10px;border-radius:999px;animation:fade 4s forwards}
+@keyframes fade{0%,70%{opacity:1}100%{opacity:0}}
+/* lists */
+.page{display:none;min-height:100dvh;padding:calc(70px + env(safe-area-inset-top)) 16px 40px;max-width:700px;margin:0 auto}
+.page h1{font-size:26px;margin-bottom:6px}
+.page .sub{color:var(--dim);margin-bottom:18px}
+.row{display:flex;gap:12px;align-items:center;background:var(--card);border-radius:14px;padding:10px;margin-bottom:10px}
+.row img{width:64px;height:96px;object-fit:cover;border-radius:10px}
+.row h3{font-size:17px}
+.row small{color:var(--dim)}
+.row .go{margin-left:auto;background:var(--acc);color:#000;font-weight:900;padding:9px 16px;border-radius:999px}
+.row .x{color:var(--dim);padding:8px}
+.empty{color:var(--dim);text-align:center;padding:50px 10px}
+.locked{text-align:center;color:var(--dim);padding:28px 10px}
+/* player */
+.player{position:fixed;inset:0;z-index:50;background:#000;display:none;flex-direction:column}
+.player.on{display:flex}
+.pbar{display:flex;align-items:center;gap:10px;padding:calc(8px + env(safe-area-inset-top)) 12px 8px;background:#0b0d12}
+.pbar b{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pbar a,.pbar button{font-size:14px;font-weight:800;padding:7px 12px;border-radius:999px;background:#ffffff1f;color:#fff;text-decoration:none}
+.player iframe{flex:1;border:0;width:100%;background:#000}
+/* modal */
+.modal{position:fixed;inset:0;z-index:60;background:#000b;display:none;align-items:center;justify-content:center;padding:16px}
+.modal.on{display:flex}
+.box{background:var(--card);border-radius:18px;padding:22px;max-width:380px;width:100%}
+.box h3{font-size:20px;margin-bottom:8px}
+.box p{color:var(--dim);font-size:14px;line-height:1.4;margin-bottom:14px}
+.box input{width:100%;font:inherit;font-size:20px;padding:12px;border-radius:10px;border:2px solid #333a48;background:#0b0d12;color:#fff;margin-bottom:12px}
+.box .btns{display:flex;gap:8px;justify-content:flex-end}
+.box .btns button{padding:10px 16px;border-radius:999px;font-weight:800;background:#ffffff1a}
+.box .btns .ok{background:var(--acc);color:#000}
+.msg{color:#ff9fc0;font-size:13px;min-height:18px;margin-bottom:6px}
+footer{color:#6b7385;font-size:12px;text-align:center;padding:20px}
+footer button{text-decoration:underline;color:#8a93a6;font-size:12px}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="logo">Game<b>Tap</b>Go</div>
+  <span class="mode" id="mode">KIDS MODE</span>
+  <nav class="tabs">
+    <button data-tab="feed" class="on">Play</button>
+    <button data-tab="mine">My Games</button>
+  </nav>
+</header>
+
+<main class="feed" id="feed"></main>
+
+<section class="page" id="mine">
+  <h1>My Games</h1>
+  <div class="sub">Games you saved to play later. They stay on this device.</div>
+  <div id="mineList"></div>
+  <footer>
+    <button id="gateBtn">Grown-up? Turn on 17+ games</button>
+    <div style="margin-top:8px">No ads. No tracking. Saved games stay on your device.</div>
+  </footer>
+</section>
+
+<div class="player" id="player">
+  <div class="pbar">
+    <button id="close">✕ Back</button>
+    <b id="ptitle"></b>
+    <a id="pnew" target="_blank" rel="noopener">Full screen ↗</a>
+  </div>
+  <iframe id="frame" allow="autoplay; fullscreen; gamepad; xr-spatial-tracking" allowfullscreen></iframe>
+</div>
+
+<div class="modal" id="gate">
+  <div class="box">
+    <h3>Grown-ups only</h3>
+    <p>Some games are rated 17+. Ask a parent if you're not sure. Enter your birth year to unlock them on this device.</p>
+    <input id="year" inputmode="numeric" maxlength="4" placeholder="YYYY">
+    <div class="msg" id="gmsg"></div>
+    <div class="btns"><button id="gNo">Cancel</button><button class="ok" id="gOk">Unlock</button></div>
+  </div>
+</div>
+
+<script>
+// Game list. age = minimum age to see it in the feed.
+const GAMES = [
+  {id:"chronicle-clash", title:"Chronicle Clash: Sky Citadel", tag:"Climb, glide and sword-fight across a city in the clouds.",
+   age:10, rating:"10+", img:"img/chronicle-clash.webp", url:"https://houawanych-pixel.github.io/chronicle-clash-mg3d/"},
+  {id:"homelancer", title:"Homelancer", tag:"Fly your ship between stations and planets in a living galaxy.",
+   age:10, rating:"10+", img:"img/homelancer.webp", url:"https://houawanych-pixel.github.io/homelancer-digital/"},
+  {id:"hovagi", title:"Hovagi", tag:"Sneak past guards, stay hidden, and switch to first-person when it gets loud.",
+   age:17, rating:"17+ MATURE", img:"img/hovagi.webp", url:"https://houawanych-pixel.github.io/hovagi-six-stage-demo/"},
+];
+
+const store = {
+  get(k,d){try{const v=localStorage.getItem("gtg_"+k);return v===null?d:JSON.parse(v)}catch(e){return d}},
+  set(k,v){try{localStorage.setItem("gtg_"+k,JSON.stringify(v))}catch(e){}}
+};
+let adult = store.get("adult", false);
+let saved = store.get("saved", []);
+let memAdult = adult; // falls back to memory if storage is blocked
+
+const $ = s => document.querySelector(s);
+const icon = {
+  heart:'<svg viewBox="0 0 24 24"><path d="M12 21s-7.5-4.6-9.6-9.2C.9 8.5 3 4.5 6.8 4.5c2.1 0 3.6 1.2 5.2 3 1.6-1.8 3.1-3 5.2-3 3.8 0 5.9 4 4.4 7.3C19.5 16.4 12 21 12 21z" fill="none" stroke="#fff" stroke-width="2"/></svg>',
+  share:'<svg viewBox="0 0 24 24"><path d="M14 5l7 7-7 7v-4c-6 0-9 2-11 5 1-6 4-10 11-11z" fill="#fff"/></svg>'
+};
+const visible = () => GAMES.filter(g => memAdult || g.age < 17);
+
+function renderFeed(){
+  const f = $("#feed");
+  f.innerHTML = visible().map((g,i)=>`
+    <article class="card" data-id="${g.id}">
+      <div class="bg" style="background-image:url('${g.img}')"></div>
+      ${i===0?'<div class="hint">Swipe up for more games</div>':''}
+      <div class="info">
+        <span class="badge ${g.age>=17?'m':''}">${g.rating}</span>
+        <h2>${g.title}</h2>
+        <p>${g.tag}</p>
+        <button class="play" data-play="${g.id}">▶ Tap to play</button>
+      </div>
+      <div class="side">
+        <button data-save="${g.id}" class="${saved.includes(g.id)?'saved':''}">${icon.heart}<span>${saved.includes(g.id)?'Saved':'Save'}</span></button>
+        <button data-share="${g.id}">${icon.share}<span>Share</span></button>
+      </div>
+    </article>`).join("") + (memAdult ? "" : `
+    <article class="card"><div class="info" style="padding-bottom:40vh">
+      <h2>That's all for now!</h2><p>More games are coming soon. Save your favourites in My Games.</p>
+    </div></article>`);
+}
+function renderMine(){
+  const list = saved.map(id=>GAMES.find(g=>g.id===id)).filter(Boolean);
+  const shown = list.filter(g => memAdult || g.age < 17);
+  const hidden = list.length - shown.length;
+  $("#mineList").innerHTML = shown.length ? shown.map(g=>`
+    <div class="row"><img src="${g.img}" alt=""><div><h3>${g.title}</h3><small>${g.rating}</small></div>
+    <button class="go" data-play="${g.id}">Play</button><button class="x" data-save="${g.id}" aria-label="Remove">✕</button></div>`).join("")
+    : '<div class="empty">Nothing saved yet. Tap ♥ on a game to save it here.</div>';
+  if(hidden) $("#mineList").innerHTML += `<div class="locked">${hidden} saved game(s) hidden in Kids Mode.</div>`;
+}
+function renderMode(){
+  const m=$("#mode"); m.textContent = memAdult ? "17+ ON" : "KIDS MODE"; m.classList.toggle("adult", memAdult);
+  $("#gateBtn").textContent = memAdult ? "Turn 17+ games off (back to Kids Mode)" : "Grown-up? Turn on 17+ games";
+}
+function all(){renderFeed();renderMine();renderMode();}
+
+function play(id){
+  const g = GAMES.find(x=>x.id===id); if(!g) return;
+  if(g.age>=17 && !memAdult){openGate();return;}
+  $("#ptitle").textContent=g.title; $("#pnew").href=g.url; $("#frame").src=g.url;
+  $("#player").classList.add("on");
+}
+function closePlayer(){$("#player").classList.remove("on"); $("#frame").src="about:blank";}
+function toggleSave(id){
+  saved = saved.includes(id) ? saved.filter(x=>x!==id) : [...saved,id];
+  store.set("saved",saved);
+  document.querySelectorAll(`[data-save="${id}"]`).forEach(b=>{
+    if(b.classList.contains("x")) return;
+    const on=saved.includes(id); b.classList.toggle("saved",on); b.querySelector("span").textContent=on?"Saved":"Save";
+  });
+  renderMine();
+}
+async function share(id){
+  const g=GAMES.find(x=>x.id===id); const url=location.origin+location.pathname+"#"+id;
+  try{ if(navigator.share){await navigator.share({title:g.title,text:"Play "+g.title+" on GameTapGo",url});}
+       else {await navigator.clipboard.writeText(url); alert("Link copied!");} }catch(e){}
+}
+function openGate(){ $("#gmsg").textContent=""; $("#year").value=""; $("#gate").classList.add("on"); setTimeout(()=>$("#year").focus(),50); }
+function tryUnlock(){
+  const y=parseInt($("#year").value,10), now=new Date().getFullYear();
+  if(!(y>1900 && y<=now)){ $("#gmsg").textContent="Enter a 4-digit year."; return; }
+  if(now-y < 18){ $("#gmsg").textContent="Sorry, these games are for grown-ups."; return; }
+  memAdult=true; store.set("adult",true); $("#gate").classList.remove("on"); all();
+}
+
+document.addEventListener("click",e=>{
+  const t=e.target.closest("button"); if(!t) return;
+  if(t.dataset.play) play(t.dataset.play);
+  else if(t.dataset.save) toggleSave(t.dataset.save);
+  else if(t.dataset.share) share(t.dataset.share);
+  else if(t.dataset.tab){
+    document.querySelectorAll(".tabs button").forEach(b=>b.classList.toggle("on",b===t));
+    $("#feed").style.display = t.dataset.tab==="feed" ? "" : "none";
+    $("#mine").style.display = t.dataset.tab==="mine" ? "block" : "none";
+    window.scrollTo(0,0);
+  }
+});
+$("#close").onclick=closePlayer;
+$("#gateBtn").onclick=()=>{ if(memAdult){memAdult=false;store.set("adult",false);all();} else openGate(); };
+$("#gNo").onclick=()=>$("#gate").classList.remove("on");
+$("#gOk").onclick=tryUnlock;
+$("#year").addEventListener("keydown",e=>{if(e.key==="Enter")tryUnlock();});
+$("#mode").onclick=()=>$("#gateBtn").click();
+
+all();
+// open a shared link (#game-id): scroll to it
+if(location.hash){ const el=document.querySelector(`.card[data-id="${location.hash.slice(1)}"]`); if(el) el.scrollIntoView(); }
+</script>
+</body>
+</html>
