@@ -54,13 +54,31 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 .row .x{color:var(--dim);padding:8px}
 .empty{color:var(--dim);text-align:center;padding:50px 10px}
 .locked{text-align:center;color:var(--dim);padding:28px 10px}
-/* player */
-.player{position:fixed;inset:0;z-index:50;background:#000;display:none;flex-direction:column}
-.player.on{display:flex}
-.pbar{display:flex;align-items:center;gap:10px;padding:calc(8px + env(safe-area-inset-top)) 12px 8px;background:#0b0d12}
-.pbar b{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.pbar a,.pbar button{font-size:14px;font-weight:800;padding:7px 12px;border-radius:999px;background:#ffffff1f;color:#fff;text-decoration:none}
+/* player: a sheet that slides up over the feed */
+.player{position:fixed;inset:0;z-index:50;background:#000;display:flex;flex-direction:column;transform:translateY(100%);visibility:hidden;transition:transform .32s cubic-bezier(.2,.8,.2,1),visibility 0s .32s}
+.player.on{transform:none;visibility:visible;transition:transform .32s cubic-bezier(.2,.8,.2,1)}
+.player.drag{transition:none}
+.pbar{position:relative;display:flex;align-items:center;gap:8px;padding:calc(14px + env(safe-area-inset-top)) 10px 8px;background:#0b0d12;touch-action:none;user-select:none;-webkit-user-select:none}
+.pbar:before{content:"";position:absolute;left:50%;top:calc(5px + env(safe-area-inset-top));width:44px;height:5px;margin-left:-22px;border-radius:9px;background:#ffffff55}
+.pbar b{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:15px}
+.pbar a,.pbar button{flex:none;display:inline-flex;align-items:center;gap:5px;font-size:14px;font-weight:800;padding:8px 12px;border-radius:999px;background:#ffffff1f;color:#fff;text-decoration:none}
+.pbar .next{background:var(--acc);color:#000}
+.pbar .ps svg{width:18px;height:18px}
+.pbar .ps.saved svg path{fill:var(--pink);stroke:var(--pink)}
+.pstage{position:relative;flex:1;display:flex}
 .player iframe{flex:1;border:0;width:100%;background:#000}
+.ploading{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:#000 center/cover;transition:opacity .3s}
+.ploading:before{content:"";position:absolute;inset:0;background:#000b;backdrop-filter:blur(8px)}
+.ploading > *{position:relative}
+.ploading.done{opacity:0;pointer-events:none}
+.spin{width:42px;height:42px;border-radius:50%;border:4px solid #ffffff33;border-top-color:var(--acc);animation:sp 0.8s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+.phint{position:absolute;left:50%;bottom:calc(18px + env(safe-area-inset-bottom));transform:translateX(-50%);white-space:nowrap;font-size:12px;color:#fff;background:#000a;padding:6px 12px;border-radius:999px;pointer-events:none;animation:fade 5s forwards}
+.toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom));transform:translate(-50%,20px);z-index:40;background:#161a22;color:#fff;font-size:14px;font-weight:700;padding:10px 16px;border-radius:999px;box-shadow:0 6px 24px #0008;opacity:0;transition:.25s;pointer-events:none;white-space:nowrap}
+.toast.on{opacity:1;transform:translate(-50%,0)}
+.dots{position:fixed;right:6px;top:50%;transform:translateY(-50%);z-index:15;display:flex;flex-direction:column;gap:6px}
+.dots i{width:5px;height:5px;border-radius:9px;background:#ffffff55;transition:.2s}
+.dots i.on{height:16px;background:var(--acc)}
 /* modal */
 .modal{position:fixed;inset:0;z-index:60;background:#000b;display:none;align-items:center;justify-content:center;padding:16px}
 .modal.on{display:flex}
@@ -98,14 +116,20 @@ footer button{text-decoration:underline;color:#8a93a6;font-size:12px}
   </footer>
 </section>
 
-<div class="player" id="player">
-  <div class="pbar">
-    <button id="close">✕ Back</button>
+<div class="player" id="player" aria-hidden="true">
+  <div class="pbar" id="pbar" title="Pull down to go back, push up for the next game">
+    <button id="close" aria-label="Back to games">✕</button>
     <b id="ptitle"></b>
-    <a id="pnew" target="_blank" rel="noopener">Full screen ↗</a>
+    <button class="ps" id="psave" aria-label="Save"></button>
+    <a id="pnew" target="_blank" rel="noopener" aria-label="Open full screen">↗</a>
+    <button class="next" id="pnext">Next ▶</button>
   </div>
-  <iframe id="frame" allow="autoplay; fullscreen; gamepad; xr-spatial-tracking" allowfullscreen></iframe>
+  <div class="pstage">
+    <div class="ploading" id="ploading"><div class="spin"></div><b id="pload">Loading…</b></div>
+  </div>
 </div>
+<div class="dots" id="dots"></div>
+<div class="toast" id="toast"></div>
 
 <div class="modal" id="gate">
   <div class="box">
@@ -178,15 +202,57 @@ function renderMode(){
   const m=$("#mode"); m.textContent = memAdult ? "17+ ON" : "KIDS MODE"; m.classList.toggle("adult", memAdult);
   $("#gateBtn").textContent = memAdult ? "Turn 17+ games off (back to Kids Mode)" : "Grown-up? Turn on 17+ games";
 }
-function all(){renderFeed();renderMine();renderMode();}
+function all(){renderFeed();renderMine();renderMode();paintDots();}
 
+let current = null;      // game open in the player
+function toast(t){ const el=$("#toast"); el.textContent=t; el.classList.add("on"); clearTimeout(toast.t); toast.t=setTimeout(()=>el.classList.remove("on"),2200); }
+function cardFor(id){ return document.querySelector(`.card[data-id="${id}"]`); }
+function nextGame(id){ const v=visible(); const i=v.findIndex(g=>g.id===id); return i>=0 && i<v.length-1 ? v[i+1] : null; }
+function paintSave(){ if(!current) return; const on=saved.includes(current.id); const b=$("#psave"); b.innerHTML=icon.heart; b.classList.toggle("saved",on); b.setAttribute("aria-label",on?"Saved":"Save"); }
+
+function load(g){
+  current=g;
+  $("#ptitle").textContent=g.title; $("#pnew").href=g.url;
+  const nx=nextGame(g.id); $("#pnext").textContent = nx ? "Next ▶" : "Done ✓";
+  const L=$("#ploading"); L.classList.remove("done"); L.style.backgroundImage=`url('${g.img}')`; $("#pload").textContent="Loading "+g.title+"…";
+  // a fresh frame each time: reusing one adds steps to the phone's back history
+  const old=$("#frame"); if(old) old.remove();
+  const f=document.createElement("iframe");
+  f.id="frame"; f.allow="autoplay; fullscreen; gamepad; xr-spatial-tracking"; f.allowFullscreen=true;
+  f.addEventListener("load",()=>$("#ploading").classList.add("done"));
+  f.src=g.url; $(".pstage").prepend(f);
+  paintSave();
+  const oh=$(".phint"); if(oh) oh.remove();
+  $(".pstage").insertAdjacentHTML("beforeend",'<div class="phint">Not for you? Tap Next ▶ or pull the bar down</div>');
+}
 function play(id){
   const g = GAMES.find(x=>x.id===id); if(!g) return;
   if(g.age>=17 && !memAdult){openGate();return;}
-  $("#ptitle").textContent=g.title; $("#pnew").href=g.url; $("#frame").src=g.url;
-  $("#player").classList.add("on");
+  load(g);
+  const p=$("#player"); p.classList.add("on"); p.setAttribute("aria-hidden","false");
+  // phone back button / back swipe closes the game instead of leaving GameTapGo
+  if(!history.state || !history.state.player) history.pushState({player:true},"");
 }
-function closePlayer(){$("#player").classList.remove("on"); $("#frame").src="about:blank";}
+function hidePlayer(){
+  const p=$("#player"); p.classList.remove("on"); p.style.transform=""; p.setAttribute("aria-hidden","true");
+  setTimeout(()=>{ if(!p.classList.contains("on")){ const f=$("#frame"); if(f) f.remove(); } },350);
+}
+// all "back" paths go through history so the phone's back button stays in sync
+function closePlayer(){ if(history.state && history.state.player) history.back(); else hidePlayer(); }
+window.addEventListener("popstate",()=>{
+  if(!$("#player").classList.contains("on")) return;
+  const g=current; hidePlayer();
+  if(g){ const c=cardFor(g.id); if(c) c.scrollIntoView(); }
+});
+// skip to the next game without leaving the player
+function skip(){
+  if(!current) return;
+  const nx=nextGame(current.id);
+  if(!nx){ closePlayer(); toast("That's all the games for now!"); return; }
+  if(nx.age>=17 && !memAdult){ closePlayer(); return; }
+  const c=cardFor(nx.id); if(c) c.scrollIntoView();
+  load(nx);
+}
 function toggleSave(id){
   saved = saved.includes(id) ? saved.filter(x=>x!==id) : [...saved,id];
   store.set("saved",saved);
@@ -194,7 +260,7 @@ function toggleSave(id){
     if(b.classList.contains("x")) return;
     const on=saved.includes(id); b.classList.toggle("saved",on); b.querySelector("span").textContent=on?"Saved":"Save";
   });
-  renderMine();
+  renderMine(); paintSave();
 }
 async function share(id){
   const g=GAMES.find(x=>x.id===id); const url=location.origin+location.pathname+"#"+id;
@@ -218,10 +284,37 @@ document.addEventListener("click",e=>{
     document.querySelectorAll(".tabs button").forEach(b=>b.classList.toggle("on",b===t));
     $("#feed").style.display = t.dataset.tab==="feed" ? "" : "none";
     $("#mine").style.display = t.dataset.tab==="mine" ? "block" : "none";
+    $("#dots").style.display = t.dataset.tab==="feed" ? "" : "none";
     window.scrollTo(0,0);
   }
 });
 $("#close").onclick=closePlayer;
+$("#pnext").onclick=skip;
+$("#psave").onclick=()=>{ if(current){ toggleSave(current.id); toast(saved.includes(current.id)?"Saved to My Games":"Removed from My Games"); } };
+
+// Drag the top bar: pull down = back to games, push up = next game
+(()=>{
+  const bar=$("#pbar"), p=$("#player"); let y0=null, dy=0;
+  bar.addEventListener("pointerdown",e=>{ if(e.target.closest("button,a")) return; y0=e.clientY; dy=0; p.classList.add("drag"); bar.setPointerCapture(e.pointerId); });
+  bar.addEventListener("pointermove",e=>{ if(y0===null) return; dy=e.clientY-y0; p.style.transform=`translateY(${Math.max(dy,-40)}px)`; });
+  const end=()=>{ if(y0===null) return; y0=null; p.classList.remove("drag"); p.style.transform="";
+    if(dy>90) closePlayer(); else if(dy<-50) skip(); };
+  bar.addEventListener("pointerup",end); bar.addEventListener("pointercancel",end);
+})();
+
+// progress dots on the right of the feed
+function paintDots(){
+  const cards=[...document.querySelectorAll("#feed .card")]; const f=$("#feed");
+  const i=Math.round(f.scrollTop/Math.max(1,f.clientHeight));
+  $("#dots").innerHTML = cards.length>1 ? cards.map((_,k)=>`<i class="${k===i?'on':''}"></i>`).join("") : "";
+}
+$("#feed").addEventListener("scroll",()=>{ cancelAnimationFrame(paintDots.r); paintDots.r=requestAnimationFrame(paintDots); },{passive:true});
+document.addEventListener("keydown",e=>{
+  if($("#player").classList.contains("on")){ if(e.key==="Escape") closePlayer(); return; }
+  const f=$("#feed"); if(f.style.display==="none") return;
+  if(e.key==="ArrowDown"||e.key==="PageDown"){ e.preventDefault(); f.scrollBy({top:f.clientHeight,behavior:"smooth"}); }
+  if(e.key==="ArrowUp"||e.key==="PageUp"){ e.preventDefault(); f.scrollBy({top:-f.clientHeight,behavior:"smooth"}); }
+});
 $("#gateBtn").onclick=()=>{ if(memAdult){memAdult=false;store.set("adult",false);all();} else openGate(); };
 $("#gNo").onclick=()=>$("#gate").classList.remove("on");
 $("#gOk").onclick=tryUnlock;
